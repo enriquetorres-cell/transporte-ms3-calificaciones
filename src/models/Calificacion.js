@@ -35,6 +35,6 @@ const calificacionSchema = new mongoose.Schema(
 
 calificacionSchema.index({ conductor_id: 1, creado_en: -1 });
 calificacionSchema.index({ tags: 1 });
-calificacionSchema.index({ comentario: "text" });
+calificacionSchema.index({ comentario: "text" }, { default_language: "spanish" });
 
 export default mongoose.model("Calificacion", calificacionSchema);

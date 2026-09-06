@@ -6,6 +6,7 @@ import os
 import random
 from datetime import timedelta
 
+from comentarios import comentario_para, RESPUESTAS, MOTIVO_DETALLE
 from pymongo import MongoClient, ASCENDING, DESCENDING
 from comun import (fake, DISTRITOS, TAGS_POSITIVOS, TAGS_NEGATIVOS,
                    N_CALIFICACIONES, N_CONDUCTORES, FECHA_INICIO, MINUTOS_RANGO)
@@ -33,7 +34,7 @@ for viaje_id in range(1, N_CALIFICACIONES + 1):
         "conductor_id": random.randint(1, N_CONDUCTORES),
         "rating": rating,
         "tags": random.sample(pool, k=random.randint(0, min(3, len(pool)))),
-        "comentario": fake.sentence(nb_words=random.randint(6, 18)) if random.random() < 0.65 else "",
+        "comentario": comentario_para(rating) if random.random() < 0.8 else "",
         "idioma": "es",
         "distrito_origen": origen,
         "distrito_destino": destino,
@@ -44,7 +45,7 @@ for viaje_id in range(1, N_CALIFICACIONES + 1):
     }
     if rating <= 2 and random.random() < 0.4:
         doc["respuesta_conductor"] = {
-            "texto": fake.sentence(nb_words=10),
+            "texto": random.choice(RESPUESTAS),
             "fecha": fecha + timedelta(hours=2),
         }
     docs.append(doc)
@@ -63,7 +64,7 @@ print("Creando indices...")
 col.create_index([("viaje_id", ASCENDING)], unique=True)
 col.create_index([("conductor_id", ASCENDING), ("creado_en", DESCENDING)])
 col.create_index([("tags", ASCENDING)])
-col.create_index([("comentario", "text")])
+col.create_index([("comentario", "text")], default_language="spanish")
 
 # Reportes de moderacion
 rep = db["reportes"]
@@ -74,7 +75,7 @@ if muestra:
         "calificacion_id": c["_id"],
         "reportado_por": random.randint(1, 2_000),
         "motivo": random.choice(["lenguaje_ofensivo", "informacion_falsa", "spam", "otro"]),
-        "detalle": fake.sentence(nb_words=8),
+        "detalle": MOTIVO_DETALLE,
         "estado": "pendiente",
         "creado_en": c["creado_en"],
         "actualizado_en": c["creado_en"],
