@@ -1,0 +1,32 @@
+# Compose LOCAL: levanta Mongo + MS3 juntos en tu laptop.
+# En AWS, Mongo vive en la MV de bases de datos y este archivo solo declara ms3.
+services:
+  mongo:
+    image: mongo:7
+    container_name: mongo_ms3
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: cambiame
+    volumes:
+      - mongo_data:/data/db
+
+  ms3:
+    build: .
+    container_name: ms3
+    restart: unless-stopped
+    depends_on:
+      - mongo
+    ports:
+      - "8003:8003"
+    environment:
+      PORT: 8003
+      PREFIX: /ms3
+      MONGO_URI: "mongodb://root:cambiame@mongo:27017/calificaciones_db?authSource=admin"
+      MS2_URL: "http://host.docker.internal:8002/ms2"
+      VALIDAR_VIAJE: "false"
+
+volumes:
+  mongo_data:

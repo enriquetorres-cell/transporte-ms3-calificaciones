@@ -1,0 +1,190 @@
+openapi: 3.0.3
+info:
+  title: MS3 - Calificaciones y Comentarios
+  version: "1.0.0"
+  description: |
+    Microservicio NoSQL (MongoDB) de la plataforma de transporte urbano.
+    CS2032 Cloud Computing - Proyecto Parcial, ciclo 2026-2.
+servers:
+  - url: https://CAMBIAR.execute-api.us-east-1.amazonaws.com/ms3
+    description: Produccion via AWS API Gateway
+  - url: http://localhost:8003/ms3
+    description: Local
+
+tags:
+  - name: calificaciones
+  - name: conductores
+  - name: reportes
+  - name: sistema
+
+paths:
+  /health:
+    get:
+      tags: [sistema]
+      summary: Health check usado por el balanceador
+      responses:
+        "200":
+          description: Servicio arriba
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:   { type: string, example: ok }
+                  servicio: { type: string, example: ms3 }
+
+  /calificaciones:
+    get:
+      tags: [calificaciones]
+      summary: Listar calificaciones con filtros y paginacion
+      parameters:
+        - { name: conductor_id, in: query, schema: { type: integer }, example: 81 }
+        - { name: pasajero_id,  in: query, schema: { type: integer } }
+        - { name: min_rating,   in: query, schema: { type: integer, minimum: 1, maximum: 5 } }
+        - { name: tag,          in: query, schema: { type: string, enum: [puntual, auto_limpio, conduccion_segura, amable, musica_agradable, ruta_eficiente, tarde, brusco] } }
+        - { name: q,            in: query, schema: { type: string }, description: Busqueda de texto libre en el comentario }
+        - { name: page,         in: query, schema: { type: integer, default: 1 } }
+        - { name: limit,        in: query, schema: { type: integer, default: 20, maximum: 100 } }
+      responses:
+        "200":
+          description: Listado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total: { type: integer, example: 22000 }
+                  page:  { type: integer, example: 1 }
+                  limit: { type: integer, example: 20 }
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/Calificacion" }
+    post:
+      tags: [calificaciones]
+      summary: Crear una calificacion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CalificacionInput" }
+      responses:
+        "201": { description: Creada }
+        "400": { description: Datos invalidos }
+        "409": { description: El viaje ya fue calificado }
+        "422": { description: El viaje no existe o no esta finalizado }
+
+  /calificaciones/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: string }, description: ObjectId }
+    get:
+      tags: [calificaciones]
+      summary: Obtener una calificacion
+      responses:
+        "200": { description: OK }
+        "404": { description: No encontrada }
+    patch:
+      tags: [calificaciones]
+      summary: Editar comentario, rating, tags o responder como conductor
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                comentario: { type: string }
+                rating:     { type: integer, minimum: 1, maximum: 5 }
+                respuesta_conductor:
+                  type: object
+                  properties:
+                    texto: { type: string }
+                    fecha: { type: string, format: date-time }
+      responses:
+        "200": { description: Actualizada }
+        "404": { description: No encontrada }
+    delete:
+      tags: [calificaciones]
+      summary: Eliminar una calificacion
+      responses:
+        "204": { description: Eliminada }
+        "404": { description: No encontrada }
+
+  /conductores/{id}/resumen:
+    get:
+      tags: [conductores]
+      summary: Reputacion agregada de un conductor
+      description: Promedio, distribucion de estrellas y tags mas frecuentes, calculados con un pipeline de agregacion.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer }, example: 81 }
+      responses:
+        "200":
+          description: Resumen
+          content:
+            application/json:
+              example:
+                conductor_id: 81
+                total: 42
+                promedio: 4.31
+                distribucion: { "1": 1, "2": 2, "3": 5, "4": 15, "5": 19 }
+                top_tags:
+                  - { tag: puntual, veces: 22 }
+                  - { tag: amable, veces: 18 }
+        "404": { description: El conductor no tiene calificaciones }
+
+  /reportes:
+    get:
+      tags: [reportes]
+      summary: Listar reportes de moderacion
+      parameters:
+        - { name: estado, in: query, schema: { type: string, enum: [pendiente, revisado, descartado] } }
+      responses:
+        "200": { description: Listado }
+    post:
+      tags: [reportes]
+      summary: Reportar una calificacion
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [calificacion_id, reportado_por, motivo]
+              properties:
+                calificacion_id: { type: string }
+                reportado_por:   { type: integer }
+                motivo:          { type: string, enum: [lenguaje_ofensivo, informacion_falsa, spam, otro] }
+                detalle:         { type: string }
+      responses:
+        "201": { description: Reporte registrado }
+        "404": { description: La calificacion no existe }
+
+components:
+  schemas:
+    CalificacionInput:
+      type: object
+      required: [viaje_id, pasajero_id, conductor_id, rating]
+      properties:
+        viaje_id:     { type: integer, example: 18420 }
+        pasajero_id:  { type: integer, example: 552 }
+        conductor_id: { type: integer, example: 81 }
+        rating:       { type: integer, minimum: 1, maximum: 5, example: 4 }
+        tags:
+          type: array
+          items: { type: string, enum: [puntual, auto_limpio, conduccion_segura, amable, musica_agradable, ruta_eficiente, tarde, brusco] }
+          example: [puntual, auto_limpio]
+        comentario:       { type: string, maxLength: 500, example: "Llego antes de la hora." }
+        distrito_origen:  { type: string, example: Miraflores }
+        distrito_destino: { type: string, example: San Isidro }
+        anonimo:          { type: boolean, default: false }
+    Calificacion:
+      allOf:
+        - $ref: "#/components/schemas/CalificacionInput"
+        - type: object
+          properties:
+            _id: { type: string }
+            moderacion:
+              type: object
+              properties:
+                estado:   { type: string, enum: [publicado, oculto, en_revision] }
+                reportes: { type: integer }
+            creado_en:      { type: string, format: date-time }
+            actualizado_en: { type: string, format: date-time }

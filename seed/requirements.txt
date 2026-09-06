@@ -1,0 +1,4 @@
+faker==30.0.0
+pymongo==4.9.1
+mysql-connector-python==9.0.0
+psycopg2-binary==2.9.9

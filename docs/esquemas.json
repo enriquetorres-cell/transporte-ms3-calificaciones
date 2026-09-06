@@ -1,0 +1,82 @@
+{
+  "base_de_datos": "calificaciones_db",
+  "motor": "MongoDB 7",
+  "microservicio": "MS3 - Calificaciones y Comentarios",
+  "nota": "El enunciado pide diagrama E/R solo para las bases SQL. Para la base NoSQL se documentan aqui las estructuras JSON.",
+  "colecciones": {
+    "calificaciones": {
+      "descripcion": "Una calificacion por viaje finalizado. Incluye el comentario libre, tags y la respuesta opcional del conductor.",
+      "documentos_estimados": 22000,
+      "ejemplo": {
+        "_id": "ObjectId('66f1a2c4e8b3f10a1c9d4e21')",
+        "viaje_id": 18420,
+        "pasajero_id": 552,
+        "conductor_id": 81,
+        "rating": 4,
+        "tags": ["puntual", "auto_limpio"],
+        "comentario": "Llego antes de la hora y el aire acondicionado funcionaba.",
+        "idioma": "es",
+        "distrito_origen": "Miraflores",
+        "distrito_destino": "San Isidro",
+        "anonimo": false,
+        "respuesta_conductor": {
+          "texto": "Gracias! Nos vemos pronto.",
+          "fecha": "2026-08-14T22:11:03Z"
+        },
+        "moderacion": { "estado": "publicado", "reportes": 0 },
+        "creado_en": "2026-08-14T21:58:40Z",
+        "actualizado_en": "2026-08-14T22:11:03Z"
+      },
+      "campos": {
+        "viaje_id": "int, unico, referencia logica a MS2.viajes.id (MySQL)",
+        "pasajero_id": "int, referencia logica a MS1.usuarios.id (PostgreSQL)",
+        "conductor_id": "int, referencia logica a MS1.conductores.id (PostgreSQL)",
+        "rating": "int 1..5, obligatorio",
+        "tags": "array de string, catalogo cerrado de 8 valores",
+        "comentario": "string, maximo 500 caracteres, puede ser vacio",
+        "idioma": "string, por defecto 'es'",
+        "distrito_origen": "string, uno de los 12 distritos del catalogo compartido",
+        "distrito_destino": "string, uno de los 12 distritos del catalogo compartido",
+        "anonimo": "boolean",
+        "respuesta_conductor": "subdocumento opcional { texto, fecha }",
+        "moderacion": "subdocumento { estado, reportes }",
+        "creado_en": "date, UTC",
+        "actualizado_en": "date, UTC"
+      },
+      "indices": [
+        { "campos": { "viaje_id": 1 }, "opciones": { "unique": true }, "para": "un viaje se califica una sola vez" },
+        { "campos": { "conductor_id": 1, "creado_en": -1 }, "para": "reputacion y ultimas resenas de un conductor" },
+        { "campos": { "tags": 1 }, "para": "filtro por tag" },
+        { "campos": { "comentario": "text" }, "para": "busqueda de texto libre" }
+      ]
+    },
+    "reportes": {
+      "descripcion": "Reportes de moderacion sobre una calificacion. Al tercer reporte la calificacion pasa a 'en_revision'.",
+      "documentos_estimados": 300,
+      "ejemplo": {
+        "_id": "ObjectId('66f1b7d9a4c2e5081b3f7a90')",
+        "calificacion_id": "ObjectId('66f1a2c4e8b3f10a1c9d4e21')",
+        "reportado_por": 91,
+        "motivo": "lenguaje_ofensivo",
+        "detalle": "Insultos en el comentario.",
+        "estado": "pendiente",
+        "creado_en": "2026-08-15T10:02:11Z",
+        "actualizado_en": "2026-08-15T10:02:11Z"
+      },
+      "campos": {
+        "calificacion_id": "ObjectId, referencia a calificaciones._id",
+        "reportado_por": "int, referencia logica a MS1.usuarios.id",
+        "motivo": "enum: lenguaje_ofensivo | informacion_falsa | spam | otro",
+        "detalle": "string, maximo 500",
+        "estado": "enum: pendiente | revisado | descartado"
+      },
+      "indices": [
+        { "campos": { "calificacion_id": 1, "estado": 1 }, "para": "cola de moderacion" }
+      ]
+    }
+  },
+  "catalogos_compartidos": {
+    "tags": ["puntual", "auto_limpio", "conduccion_segura", "amable", "musica_agradable", "ruta_eficiente", "tarde", "brusco"],
+    "distritos": ["Miraflores", "San Isidro", "Surco", "Barranco", "La Molina", "Lince", "Jesús María", "San Borja", "Magdalena", "Pueblo Libre", "Callao", "San Juan de Lurigancho"]
+  }
+}
