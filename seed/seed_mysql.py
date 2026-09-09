@@ -8,7 +8,7 @@ from datetime import timedelta
 
 import mysql.connector
 from comun import (fake, DISTRITOS, METODOS_PAGO, TIPOS_SERVICIO,
-                   N_VIAJES, N_CONDUCTORES, FECHA_INICIO, MINUTOS_RANGO)
+                   N_USUARIOS, N_VIAJES, N_CONDUCTORES, FECHA_INICIO, MINUTOS_RANGO)
 
 LOTE = 2_000
 
@@ -29,15 +29,16 @@ cn.commit()
 
 # --- tarifas ---
 TARIFAS = [
-    (1, "economico", 4.00, 1.10, 0.25, 1.20, "2026-01-01"),
-    (2, "estandar",  5.50, 1.45, 0.32, 1.35, "2026-01-01"),
-    (3, "confort",   8.00, 1.95, 0.45, 1.50, "2026-01-01"),
-    (4, "xl",       11.00, 2.40, 0.55, 1.60, "2026-01-01"),
+    (1, "economico", 4.00, 1.10, 0.25, 1.20),
+    (2, "estandar",  5.50, 1.45, 0.32, 1.35),
+    (3, "confort",   8.00, 1.95, 0.45, 1.50),
+    (4, "xl",       11.00, 2.40, 0.55, 1.60),
 ]
+# 'activa' no se inserta: el DDL de MS2 la define con DEFAULT TRUE.
 cur.executemany(
-    """INSERT INTO tarifas (id, nombre, tarifa_base, costo_km, costo_minuto,
-                            multiplicador_hora_pico, vigente_desde)
-       VALUES (%s,%s,%s,%s,%s,%s,%s)""", TARIFAS)
+    """INSERT INTO tarifas (id, tipo_servicio, tarifa_base, costo_por_km, costo_por_minuto,
+                            multiplicador_hora_pico)
+       VALUES (%s,%s,%s,%s,%s,%s)""", TARIFAS)
 cn.commit()
 print("  tarifas: 4")
 
@@ -70,7 +71,7 @@ for i in range(1, N_VIAJES + 1):
     origen, destino = random.sample(DISTRITOS, 2)
 
     lote.append((
-        i, random.randint(1, 2_000), conductor_id, conductor_id, tarifa[0],
+        i, random.randint(1, N_USUARIOS), conductor_id, conductor_id, tarifa[0],
         origen, destino, fake.street_address()[:150], fake.street_address()[:150],
         km, duracion, monto, random.choice(METODOS_PAGO), estado,
         solicitado, iniciado if estado != "cancelado" else None, finalizado,
@@ -89,7 +90,7 @@ if lote:
     insertados += len(lote)
 
 # --- paradas: 0 a 2 por viaje ---
-SQL_PARADA = """INSERT INTO paradas (viaje_id, orden, direccion, distrito, latitud, longitud, llego_en)
+SQL_PARADA = """INSERT INTO paradas (viaje_id, orden, direccion, distrito, latitud, longitud, llegada_en)
                 VALUES (%s,%s,%s,%s,%s,%s,%s)"""
 lote, total_paradas = [], 0
 for viaje_id in range(1, N_VIAJES + 1):
