@@ -16,6 +16,8 @@ app.use(express.json());
 // Swagger UI en /ms3/docs
 const openapi = YAML.load(path.join(__dirname, "..", "docs", "openapi.yaml"));
 app.use(`${PREFIX}/docs`, swaggerUi.serve, swaggerUi.setup(openapi));
+// OpenAPI en JSON (Contrato Cero: /msN/openapi.json)
+app.get(`${PREFIX}/openapi.json`, (_req, res) => res.json(openapi));
 
 // Todas las rutas cuelgan del prefijo (clausula 2.1 del Contrato Cero)
 app.use(PREFIX, router);
