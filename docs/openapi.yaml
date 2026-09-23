@@ -1,190 +1,344 @@
 openapi: 3.0.3
 info:
   title: MS3 - Calificaciones y Comentarios
-  version: "1.0.0"
+  version: "1.1.0"
   description: |
-    Microservicio NoSQL (MongoDB) de la plataforma de transporte urbano.
+    Microservicio NoSQL (**MongoDB** · `calificaciones_db`) de la plataforma de transporte urbano.
     CS2032 Cloud Computing - Proyecto Parcial, ciclo 2026-2.
+
+    - **Calificaciones** de viajes (1 a 5 estrellas, tags y comentario) con búsqueda de texto
+      en español sobre el comentario (índice de texto de MongoDB).
+    - **Reputación del conductor** con un pipeline de agregación (`$facet`): promedio,
+      distribución de estrellas y tags más frecuentes. **MS1 la consume** para sus reglas
+      de elegibilidad y categoría, y **MS4** para la hoja de vida.
+    - **Moderación**: con 3 reportes, una calificación pasa a `en_revision`.
+
+    Listados `{total, page, limit, items}`. Errores `{error, detalle}`.
 servers:
-  - url: https://CAMBIAR.execute-api.us-east-1.amazonaws.com/ms3
-    description: Produccion via AWS API Gateway
+  - url: https://h4sh35u9ac.execute-api.us-east-1.amazonaws.com/ms3
+    description: Producción vía AWS API Gateway (HTTPS)
   - url: http://localhost:8003/ms3
     description: Local
 
 tags:
-  - name: calificaciones
-  - name: conductores
-  - name: reportes
-  - name: sistema
+  - name: Calificaciones
+    description: Listar, buscar, crear, editar y borrar calificaciones de viajes.
+  - name: Conductores
+    description: Reputación agregada de un conductor (la consumen MS1 y MS4).
+  - name: Reportes
+    description: Moderación de calificaciones.
+  - name: Salud
+    description: Health check del Contrato Cero.
 
 paths:
   /health:
     get:
-      tags: [sistema]
+      tags: [Salud]
       summary: Health check usado por el balanceador
       responses:
         "200":
           description: Servicio arriba
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  status:   { type: string, example: ok }
-                  servicio: { type: string, example: ms3 }
+              schema: { $ref: "#/components/schemas/Health" }
 
   /calificaciones:
     get:
-      tags: [calificaciones]
-      summary: Listar calificaciones con filtros y paginacion
+      tags: [Calificaciones]
+      summary: Listar y buscar calificaciones (paginado)
+      description: Todos los filtros son opcionales y se combinan. Orden por fecha, más recientes primero.
       parameters:
-        - { name: conductor_id, in: query, schema: { type: integer }, example: 81 }
+        - { name: conductor_id, in: query, schema: { type: integer }, example: 101 }
         - { name: pasajero_id,  in: query, schema: { type: integer } }
-        - { name: min_rating,   in: query, schema: { type: integer, minimum: 1, maximum: 5 } }
-        - { name: tag,          in: query, schema: { type: string, enum: [puntual, auto_limpio, conduccion_segura, amable, musica_agradable, ruta_eficiente, tarde, brusco] } }
-        - { name: q,            in: query, schema: { type: string }, description: Busqueda de texto libre en el comentario }
-        - { name: page,         in: query, schema: { type: integer, default: 1 } }
-        - { name: limit,        in: query, schema: { type: integer, default: 20, maximum: 100 } }
+        - { name: min_rating,   in: query, schema: { type: integer, minimum: 1, maximum: 5 }, description: Rating mínimo }
+        - { name: tag,          in: query, schema: { $ref: "#/components/schemas/Tag" } }
+        - { name: q,            in: query, schema: { type: string }, example: puntual, description: Búsqueda de texto libre en el comentario (español) }
+        - { name: page,         in: query, schema: { type: integer, default: 1, minimum: 1 } }
+        - { name: limit,        in: query, schema: { type: integer, default: 20, minimum: 1, maximum: 100 } }
       responses:
         "200":
-          description: Listado
+          description: Listado paginado
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  total: { type: integer, example: 22000 }
-                  page:  { type: integer, example: 1 }
-                  limit: { type: integer, example: 20 }
-                  items:
-                    type: array
-                    items: { $ref: "#/components/schemas/Calificacion" }
+              schema: { $ref: "#/components/schemas/ListadoCalificaciones" }
     post:
-      tags: [calificaciones]
-      summary: Crear una calificacion
+      tags: [Calificaciones]
+      summary: Crear una calificación
+      description: Un viaje solo se puede calificar una vez (índice único en `viaje_id`).
       requestBody:
         required: true
         content:
           application/json:
             schema: { $ref: "#/components/schemas/CalificacionInput" }
       responses:
-        "201": { description: Creada }
-        "400": { description: Datos invalidos }
-        "409": { description: El viaje ya fue calificado }
-        "422": { description: El viaje no existe o no esta finalizado }
+        "201":
+          description: Creada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Calificacion" }
+        "400": { $ref: "#/components/responses/DatosInvalidos" }
+        "409":
+          description: El viaje ya fue calificado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: El viaje ya fue calificado, detalle: '{"viaje_id":18420}' }
+        "422":
+          description: El viaje no existe o no está finalizado (solo si la validación contra MS2 está activa)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
   /calificaciones/{id}:
     parameters:
-      - { name: id, in: path, required: true, schema: { type: string }, description: ObjectId }
+      - { name: id, in: path, required: true, schema: { type: string }, description: "ObjectId de MongoDB", example: 6aa3098e031cfe89ae9651d3 }
     get:
-      tags: [calificaciones]
-      summary: Obtener una calificacion
+      tags: [Calificaciones]
+      summary: Obtener una calificación
       responses:
-        "200": { description: OK }
-        "404": { description: No encontrada }
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Calificacion" }
+        "400": { $ref: "#/components/responses/IdInvalido" }
+        "404": { $ref: "#/components/responses/NoEncontrada" }
     patch:
-      tags: [calificaciones]
-      summary: Editar comentario, rating, tags o responder como conductor
+      tags: [Calificaciones]
+      summary: Editar comentario, rating o tags, o responder como conductor
       requestBody:
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                comentario: { type: string }
-                rating:     { type: integer, minimum: 1, maximum: 5 }
-                respuesta_conductor:
-                  type: object
-                  properties:
-                    texto: { type: string }
-                    fecha: { type: string, format: date-time }
+            schema: { $ref: "#/components/schemas/CalificacionCambios" }
       responses:
-        "200": { description: Actualizada }
-        "404": { description: No encontrada }
+        "200":
+          description: Actualizada
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Calificacion" }
+        "400": { $ref: "#/components/responses/DatosInvalidos" }
+        "404": { $ref: "#/components/responses/NoEncontrada" }
     delete:
-      tags: [calificaciones]
-      summary: Eliminar una calificacion
+      tags: [Calificaciones]
+      summary: Eliminar una calificación (y sus reportes)
       responses:
         "204": { description: Eliminada }
-        "404": { description: No encontrada }
+        "400": { $ref: "#/components/responses/IdInvalido" }
+        "404": { $ref: "#/components/responses/NoEncontrada" }
 
   /conductores/{id}/resumen:
     get:
-      tags: [conductores]
-      summary: Reputacion agregada de un conductor
-      description: Promedio, distribucion de estrellas y tags mas frecuentes, calculados con un pipeline de agregacion.
+      tags: [Conductores]
+      summary: Reputación agregada de un conductor
+      description: |
+        Promedio, distribución de estrellas y tags más frecuentes, calculados con un pipeline
+        de agregación (`$facet`) sobre las calificaciones publicadas. MS1 usa `promedio` y
+        `total` para decidir la elegibilidad y la categoría del conductor.
       parameters:
-        - { name: id, in: path, required: true, schema: { type: integer }, example: 81 }
+        - { name: id, in: path, required: true, schema: { type: integer }, example: 101 }
       responses:
         "200":
           description: Resumen
           content:
             application/json:
-              example:
-                conductor_id: 81
-                total: 42
-                promedio: 4.31
-                distribucion: { "1": 1, "2": 2, "3": 5, "4": 15, "5": 19 }
-                top_tags:
-                  - { tag: puntual, veces: 22 }
-                  - { tag: amable, veces: 18 }
-        "404": { description: El conductor no tiene calificaciones }
+              schema: { $ref: "#/components/schemas/ResumenConductor" }
+        "400":
+          description: El id no es un número
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "404":
+          description: El conductor no tiene calificaciones
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+              example: { error: El conductor no tiene calificaciones }
 
   /reportes:
     get:
-      tags: [reportes]
-      summary: Listar reportes de moderacion
+      tags: [Reportes]
+      summary: Listar reportes de moderación (paginado)
       parameters:
         - { name: estado, in: query, schema: { type: string, enum: [pendiente, revisado, descartado] } }
+        - { name: page,   in: query, schema: { type: integer, default: 1, minimum: 1 } }
+        - { name: limit,  in: query, schema: { type: integer, default: 20, maximum: 100 } }
       responses:
-        "200": { description: Listado }
+        "200":
+          description: Listado paginado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ListadoReportes" }
     post:
-      tags: [reportes]
-      summary: Reportar una calificacion
+      tags: [Reportes]
+      summary: Reportar una calificación
+      description: Suma un reporte a la calificación; con 3 reportes pasa a `moderacion.estado = en_revision`.
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              required: [calificacion_id, reportado_por, motivo]
-              properties:
-                calificacion_id: { type: string }
-                reportado_por:   { type: integer }
-                motivo:          { type: string, enum: [lenguaje_ofensivo, informacion_falsa, spam, otro] }
-                detalle:         { type: string }
+            schema: { $ref: "#/components/schemas/ReporteInput" }
       responses:
-        "201": { description: Reporte registrado }
-        "404": { description: La calificacion no existe }
+        "201":
+          description: Reporte registrado
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reporte" }
+        "400": { $ref: "#/components/responses/DatosInvalidos" }
+        "404":
+          description: La calificación no existe
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
 
 components:
+  responses:
+    DatosInvalidos:
+      description: Datos inválidos (validación de MongoDB)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: Datos invalidos, detalle: "rating: Path `rating` (7) is more than maximum allowed value (5)." }
+    IdInvalido:
+      description: El id no es un ObjectId válido
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: Identificador con formato invalido, detalle: abc }
+    NoEncontrada:
+      description: No existe
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+          example: { error: Calificacion no encontrada }
+
   schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:   { type: string }
+        detalle: { type: string }
+
+    Health:
+      type: object
+      properties:
+        status:   { type: string, example: ok }
+        servicio: { type: string, example: ms3 }
+
+    Tag:
+      type: string
+      enum: [puntual, auto_limpio, conduccion_segura, amable, musica_agradable, ruta_eficiente, tarde, brusco]
+
     CalificacionInput:
       type: object
       required: [viaje_id, pasajero_id, conductor_id, rating]
       properties:
         viaje_id:     { type: integer, example: 18420 }
         pasajero_id:  { type: integer, example: 552 }
-        conductor_id: { type: integer, example: 81 }
+        conductor_id: { type: integer, example: 101 }
         rating:       { type: integer, minimum: 1, maximum: 5, example: 4 }
         tags:
           type: array
-          items: { type: string, enum: [puntual, auto_limpio, conduccion_segura, amable, musica_agradable, ruta_eficiente, tarde, brusco] }
+          items: { $ref: "#/components/schemas/Tag" }
           example: [puntual, auto_limpio]
-        comentario:       { type: string, maxLength: 500, example: "Llego antes de la hora." }
+        comentario:       { type: string, maxLength: 500, example: "Llegó antes de la hora y el auto estaba limpio." }
         distrito_origen:  { type: string, example: Miraflores }
         distrito_destino: { type: string, example: San Isidro }
         anonimo:          { type: boolean, default: false }
+
+    CalificacionCambios:
+      type: object
+      description: Solo se aplican los campos enviados.
+      properties:
+        comentario: { type: string, maxLength: 500 }
+        rating:     { type: integer, minimum: 1, maximum: 5 }
+        tags:
+          type: array
+          items: { $ref: "#/components/schemas/Tag" }
+        anonimo:    { type: boolean }
+        respuesta_conductor:
+          type: object
+          properties:
+            texto: { type: string, maxLength: 500, example: "¡Gracias por su comentario!" }
+            fecha: { type: string, format: date-time }
+
     Calificacion:
       allOf:
         - $ref: "#/components/schemas/CalificacionInput"
         - type: object
           properties:
-            _id: { type: string }
+            _id:    { type: string, example: 6aa3098e031cfe89ae9651d3 }
+            idioma: { type: string, example: es }
+            respuesta_conductor:
+              type: object
+              properties:
+                texto: { type: string }
+                fecha: { type: string, format: date-time }
             moderacion:
               type: object
               properties:
-                estado:   { type: string, enum: [publicado, oculto, en_revision] }
-                reportes: { type: integer }
+                estado:   { type: string, enum: [publicado, oculto, en_revision], example: publicado }
+                reportes: { type: integer, example: 0 }
             creado_en:      { type: string, format: date-time }
             actualizado_en: { type: string, format: date-time }
+
+    ListadoCalificaciones:
+      type: object
+      properties:
+        total: { type: integer, example: 22000 }
+        page:  { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Calificacion" }
+
+    ResumenConductor:
+      type: object
+      properties:
+        conductor_id: { type: integer, example: 101 }
+        total:        { type: integer, description: Calificaciones publicadas, example: 41 }
+        promedio:     { type: number, example: 4.27 }
+        distribucion:
+          type: object
+          description: Cantidad de calificaciones por estrella
+          additionalProperties: { type: integer }
+          example: { "1": 1, "2": 2, "3": 5, "4": 15, "5": 18 }
+        top_tags:
+          type: array
+          items:
+            type: object
+            properties:
+              tag:   { $ref: "#/components/schemas/Tag" }
+              veces: { type: integer }
+          example:
+            - { tag: puntual, veces: 22 }
+            - { tag: amable, veces: 18 }
+
+    ReporteInput:
+      type: object
+      required: [calificacion_id, reportado_por, motivo]
+      properties:
+        calificacion_id: { type: string, example: 6aa3098e031cfe89ae9651d3 }
+        reportado_por:   { type: integer, description: ID del usuario que reporta, example: 552 }
+        motivo:          { type: string, enum: [lenguaje_ofensivo, informacion_falsa, spam, otro] }
+        detalle:         { type: string, maxLength: 500 }
+
+    Reporte:
+      allOf:
+        - $ref: "#/components/schemas/ReporteInput"
+        - type: object
+          properties:
+            _id:            { type: string }
+            estado:         { type: string, enum: [pendiente, revisado, descartado], example: pendiente }
+            creado_en:      { type: string, format: date-time }
+            actualizado_en: { type: string, format: date-time }
+
+    ListadoReportes:
+      type: object
+      properties:
+        total: { type: integer, example: 300 }
+        page:  { type: integer, example: 1 }
+        limit: { type: integer, example: 20 }
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/Reporte" }
