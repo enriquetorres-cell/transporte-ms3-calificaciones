@@ -37,10 +37,11 @@ export async function crear(req, res) {
 }
 
 export async function listar(req, res) {
-  const { conductor_id, pasajero_id, min_rating, tag, q } = req.query;
+  const { viaje_id, conductor_id, pasajero_id, min_rating, tag, q } = req.query;
   const { page, limit, skip } = paginacion(req.query);
 
   const filtro = {};
+  if (viaje_id)     filtro.viaje_id = Number(viaje_id);      // usa el indice unico de viaje_id
   if (conductor_id) filtro.conductor_id = Number(conductor_id);
   if (pasajero_id)  filtro.pasajero_id = Number(pasajero_id);
   if (min_rating)   filtro.rating = { $gte: Number(min_rating) };

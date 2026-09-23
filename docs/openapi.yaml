@@ -48,6 +48,7 @@ paths:
       summary: Listar y buscar calificaciones (paginado)
       description: Todos los filtros son opcionales y se combinan. Orden por fecha, más recientes primero.
       parameters:
+        - { name: viaje_id,     in: query, schema: { type: integer }, description: "Calificación de un viaje (0 o 1 resultado). La usa MS4 en el detalle completo." }
         - { name: conductor_id, in: query, schema: { type: integer }, example: 101 }
         - { name: pasajero_id,  in: query, schema: { type: integer } }
         - { name: min_rating,   in: query, schema: { type: integer, minimum: 1, maximum: 5 }, description: Rating mínimo }
