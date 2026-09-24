@@ -3,13 +3,17 @@
 Microservicio NoSQL de la plataforma de transporte urbano.
 **CS2032 Cloud Computing** — Proyecto Parcial, ciclo 2026-2 · Parte **P3**.
 
+> **Despliegue completo del proyecto en AWS (paso a paso):** ver la
+> [guía principal](https://github.com/Limepal/MS1-Usuarios-y-Conductores#readme).
+> En producción este servicio lo construye y levanta `desplegar-prod.sh` en mv-prod-a y mv-prod-b.
+
 | | |
 |---|---|
 | Lenguaje | Node.js 20 · Express 4 |
 | Base de datos | MongoDB 7 |
 | Puerto | `8003` |
 | Prefijo | `/ms3` |
-| Swagger UI | `/ms3/docs` |
+| Swagger UI | `/ms3/docs` (OpenAPI en `/ms3/openapi.json`, fuente `docs/openapi.yaml`) |
 | Health check | `/ms3/health` |
 
 ## Levantar en local (un solo comando)
@@ -37,12 +41,12 @@ npm run dev
 | Método | Ruta | Descripción |
 |---|---|---|
 | GET | `/ms3/health` | Health check del balanceador |
-| GET | `/ms3/calificaciones` | Listar con filtros `conductor_id`, `pasajero_id`, `min_rating`, `tag`, `q`, `page`, `limit` |
+| GET | `/ms3/calificaciones` | Listar con filtros `viaje_id`, `conductor_id`, `pasajero_id`, `min_rating`, `tag`, `q` (texto), `page`, `limit` |
 | GET | `/ms3/calificaciones/:id` | Detalle |
 | POST | `/ms3/calificaciones` | Crear · 409 si el viaje ya fue calificado |
 | PATCH | `/ms3/calificaciones/:id` | Editar comentario, rating, tags o responder como conductor |
 | DELETE | `/ms3/calificaciones/:id` | Eliminar |
-| GET | `/ms3/conductores/:id/resumen` | Promedio, distribución de estrellas y top de tags (agregación) |
+| GET | `/ms3/conductores/:id/resumen` | Promedio, distribución de estrellas y top de tags (agregación `$facet`). Lo consumen **MS1** (reglas) y **MS4** |
 | GET | `/ms3/reportes` | Cola de moderación |
 | POST | `/ms3/reportes` | Reportar una calificación |
 
@@ -77,16 +81,18 @@ están en [`seed/`](seed/) con su propio README. Orden: PostgreSQL → MySQL →
 |---|---|---|
 | `PORT` | `8003` | Puerto de escucha |
 | `PREFIX` | `/ms3` | Prefijo de todas las rutas |
-| `MONGO_URI` | `mongodb://app_ms3:***@10.0.2.50:27017/calificaciones_db?authSource=admin` | Conexión a la MV de bases |
+| `MONGO_URI` | `mongodb://app_ms3:***@10.0.2.x:27017/calificaciones_db?authSource=calificaciones_db` | Conexión a la MV de bases (`app_ms3` se crea en `calificaciones_db`) |
 | `MS2_URL` | `http://alb-interno/ms2` | Para validar el viaje contra MS2 |
 | `VALIDAR_VIAJE` | `false` | Apaga la validación cruzada si MS2 no está arriba |
 
-## Despliegue
+## Despliegue en AWS
 
-1. `docker build -t <usuario>/transporte-ms3:1.0 . && docker push <usuario>/transporte-ms3:1.0`
-2. En cada MV de producción, el compose del equipo hace `pull` de esa imagen.
-3. El balanceador interno enruta `/ms3/*` al target group del puerto 8003.
-4. AWS API Gateway (HTTP API + VPC Link) expone `https://…execute-api…/ms3/*`.
+1. En mv-prod-a y mv-prod-b, `desplegar-prod.sh` (repo de MS1) clona este repo, construye la imagen
+   `transporte-ms3:1.2` y la levanta con `docker compose` en el puerto 8003.
+2. El ALB interno enruta `/ms3/*` al target group `tg-ms3` (health check `GET /ms3/health`).
+3. El API Gateway (HTTP API + VPC Link) lo expone en `https://<api-id>.execute-api.us-east-1.amazonaws.com/ms3/*`.
+
+Pasos completos: [guía principal](https://github.com/Limepal/MS1-Usuarios-y-Conductores#readme).
 
 ## Notas de implementación
 

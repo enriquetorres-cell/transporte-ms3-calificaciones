@@ -11,16 +11,18 @@ Cargan >=20,000 registros en una tabla de cada una de las tres bases del proyect
 Los tres comparten `comun.py`: misma semilla (42), mismos distritos, mismos rangos de ID.
 Cambiar cualquiera de esos valores en un solo script rompe la coherencia entre bases.
 
-## Preparacion
+## Preparacion (en mv-prod-a, Amazon Linux 2023)
 
-    python3 -m venv .venv && source .venv/bin/activate
-    pip install -r requirements.txt
+    sudo dnf install -y git python3-pip
+    git clone https://github.com/enriquetorres-cell/transporte-ms3-calificaciones.git
+    cd transporte-ms3-calificaciones/seed
+    pip3 install --user -r requirements.txt
 
 ## Variables de entorno
 
     export PG_DSN="host=10.0.2.X dbname=usuarios_db user=app_ms1 password=***"
     export MYSQL_HOST=10.0.2.X MYSQL_USER=app_ms2 MYSQL_PASS=*** MYSQL_DB=viajes_db
-    export MONGO_URI="mongodb://app_ms3:***@10.0.2.X:27017/calificaciones_db?authSource=admin"
+    export MONGO_URI="mongodb://app_ms3:***@10.0.2.X:27017/calificaciones_db?authSource=calificaciones_db"
 
 ## Importante
 
